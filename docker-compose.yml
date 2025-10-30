@@ -1,0 +1,70 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: rentmini
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    env_file: .env
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  bot:
+    build: ./bot
+    env_file: .env
+    depends_on:
+      - backend
+
+  frontend:
+    build: ./frontend
+    env_file: .env
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - uploads:/var/www/uploads
+      - certbot:/var/www/certbot
+      - letsencrypt:/etc/letsencrypt
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - frontend
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot:/var/www/certbot
+      - letsencrypt:/etc/letsencrypt
+    entrypoint: sh -c "trap 'exit 0' TERM; while :; do sleep 12h & wait $!; certbot renew --webroot -w /var/www/certbot --quiet; done"
+
+volumes:
+  db_data: {}
+  uploads: {}
+  certbot: {}
+  letsencrypt: {}
