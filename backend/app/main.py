@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from app.core.db import init_db
+from app.routers import auth, listings, users
 
 app = FastAPI(title="RentMini v2 API")
 
@@ -12,10 +13,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event('startup')
+async def on_startup():
+    await init_db()
+
 @app.get('/api/health')
-def health():
+async def health():
     return {"status": "ok"}
 
-@app.get('/api/ping')
-def ping():
-    return JSONResponse({"pong": True})
+app.include_router(auth.router)
+app.include_router(listings.router)
+app.include_router(users.router)
